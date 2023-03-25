@@ -1,1 +1,1 @@
-# SmartGardeningProject
+# SmartGarden
