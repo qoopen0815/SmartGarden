@@ -87,7 +87,6 @@ void readSensor(void * pvParameters)
   while(1)
   {
     // ここでセンサ値を格納する
-    // moisture = random(0, 10);
     moisture = analogRead(ANALOG_READ_PIN);
     Serial.println(moisture);
     delay(SENSOR_READ_INTERVAL);  // 1 min
@@ -165,8 +164,8 @@ void createNewIndex(JsonDocument& mapping, const char* host, char* indexName)
   if (httpResponseCode > 0)
   {
     Serial.printf("HTTP Response code: %d\n", httpResponseCode);
-    // String response = http.getString();
-    // Serial.println(response);
+    String response = http.getString();
+    Serial.println(response);
   }
   else
   {
@@ -196,8 +195,8 @@ void sendHttpRequest(JsonDocument& doc, const char* host, const char* indexName,
   if (httpResponseCode > 0)
   {
     Serial.printf("HTTP Response code: %d\n", httpResponseCode);
-    // String response = http.getString();
-    // Serial.println(response);
+    String response = http.getString();
+    Serial.println(response);
   }
   else
   {
