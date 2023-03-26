@@ -2,22 +2,21 @@
 #include <ArduinoJson.h>
 #include <ElasticsearchClient.h>
 #include <HTTPClient.h>
-#include <time.h>
 #include <WiFi.h>
+#include <time.h>
 
 #define ANALOG_READ_PIN 34
 #define WIFI_SSID "hoge"
 #define WIFI_PASS "fuga"
 #define ELASTICSEARCH_HOST "piyo"
-#define SENSOR_READ_INTERVAL 600000  // msec
-#define DATA_UPLOAD_INTERVAL 1800000 // msec
+#define SENSOR_READ_INTERVAL 600000   // msec
+#define DATA_UPLOAD_INTERVAL 1800000  // msec
 
-// Elasticsearch index settings
+// Elasticsearch settings
+ElasticsearchClient elastic(ELASTICSEARCH_HOST, 9200);
 const char *indexBaseName = "plant01";
 
-ElasticsearchClient elastic(ELASTICSEARCH_HOST, 9200);
-StaticJsonDocument<200> doc;
-
+// Timestamp
 struct tm timeInfo;
 
 // Sensor data variables
@@ -27,12 +26,12 @@ long moisture;
 void readSensor(void *pvParameters);
 void uploadData(void *pvParameters);
 void getLocalTimeFromEpoch(time_t epochTime, struct tm *timeinfo);
-void createIndexName(const char *baseName, struct tm *timeinfo, char *indexName);
+void createIndexName(const char *baseName, struct tm *timeinfo,
+                     char *indexName);
 void createMappingJsonPayload(JsonDocument &mapping);
 void createIlmPolicyJsonPayload(JsonDocument &doc);
 
-void setup()
-{
+void setup() {
   Serial.begin(115200);
 
   // Connect to Wi-Fi network
@@ -52,31 +51,22 @@ void setup()
   Serial.println("Time synchronized");
 
   // Regist RTC task
-  xTaskCreatePinnedToCore(
-      readSensor, // Function to implement the task.
-      "task1",
-      4 * 1024,   // The size of the task stack specified as the number of * bytes.
-      NULL,       // Pointer that will be used as the parameter for the task * being created.
-      1,          // Priority of the task.
-      NULL,       // Task handler.
-      0);         // Core where the task should run.
+  xTaskCreatePinnedToCore(readSensor,  // Function to implement the task.
+                          "task1",
+                          4 * 1024,  // The size of the task stack specified as
+                                     // the number of * bytes.
+                          NULL,  // Pointer that will be used as the parameter
+                                 // for the task * being created.
+                          1,     // Priority of the task.
+                          NULL,  // Task handler.
+                          0);    // Core where the task should run.
 
-  xTaskCreatePinnedToCore(
-      uploadData,
-      "task2",
-      4 * 1024,
-      NULL,
-      2,
-      NULL,
-      0);
+  xTaskCreatePinnedToCore(uploadData, "task2", 4 * 1024, NULL, 2, NULL, 0);
 }
 
-void loop()
-{
-}
+void loop() {}
 
-void readSensor(void *pvParameters)
-{
+void readSensor(void *pvParameters) {
   while (1) {
     // ここでセンサ値を格納する
     moisture = analogRead(ANALOG_READ_PIN);
@@ -85,8 +75,7 @@ void readSensor(void *pvParameters)
   }
 }
 
-void uploadData(void *pvParameters)
-{
+void uploadData(void *pvParameters) {
   while (1) {
     // Get current date and time
     time_t now = time(nullptr);
@@ -117,49 +106,53 @@ void uploadData(void *pvParameters)
 
     // Send data to elasticsearch via http
     char docId[20];
-    sprintf(docId, "%04d%02d%02d%02d%02d%02d",
-            timeInfo.tm_year + 1900, timeInfo.tm_mon + 1, timeInfo.tm_mday,
-            timeInfo.tm_hour, timeInfo.tm_min, timeInfo.tm_sec);
+    sprintf(docId, "%04d%02d%02d%02d%02d%02d", timeInfo.tm_year + 1900,
+            timeInfo.tm_mon + 1, timeInfo.tm_mday, timeInfo.tm_hour,
+            timeInfo.tm_min, timeInfo.tm_sec);
     elastic.uploadData(indexName, doc, docId);
 
     delay(DATA_UPLOAD_INTERVAL);
   }
 }
 
-void getLocalTimeFromEpoch(time_t epochTime, struct tm *timeinfo)
-{
+void getLocalTimeFromEpoch(time_t epochTime, struct tm *timeinfo) {
   localtime_r(&epochTime, timeinfo);
 }
 
-void createIndexName(const char *baseName, struct tm *timeinfo, char *indexName)
-{
+void createIndexName(const char *baseName, struct tm *timeinfo,
+                     char *indexName) {
   char dateBuff[20];
   strftime(dateBuff, sizeof(dateBuff), "%Y.%m.%d", timeinfo);
-  sprintf(indexName, "%s-%04d.%02d.%02d", baseName, timeinfo->tm_year + 1900, timeinfo->tm_mon + 1, timeinfo->tm_mday);
+  sprintf(indexName, "%s-%04d.%02d.%02d", baseName, timeinfo->tm_year + 1900,
+          timeinfo->tm_mon + 1, timeinfo->tm_mday);
 }
 
-void createMappingJsonPayload(JsonDocument &doc)
-{
-  JsonObject mappings_properties = doc["mappings"].createNestedObject("properties");
-  JsonObject mappings_properties_timestamp = mappings_properties.createNestedObject("@timestamp");
+void createMappingJsonPayload(JsonDocument &doc) {
+  JsonObject mappings_properties =
+      doc["mappings"].createNestedObject("properties");
+  JsonObject mappings_properties_timestamp =
+      mappings_properties.createNestedObject("@timestamp");
   mappings_properties_timestamp["type"] = "date";
   mappings_properties_timestamp["format"] = "date_time_no_millis";
   mappings_properties["soil_moisture"]["type"] = "long";
 }
 
-void createIlmPolicyJsonPayload(JsonDocument &doc)
-{
+void createIlmPolicyJsonPayload(JsonDocument &doc) {
   JsonObject policy_phases = doc["policy"].createNestedObject("phases");
-  JsonObject policy_phases_hot_actions_rollover = policy_phases["hot"]["actions"].createNestedObject("rollover");
+  JsonObject policy_phases_hot_actions_rollover =
+      policy_phases["hot"]["actions"].createNestedObject("rollover");
   policy_phases_hot_actions_rollover["max_age"] = "1d";
   policy_phases_hot_actions_rollover["max_size"] = "10gb";
-  JsonObject policy_phases_warm_actions_rollover = policy_phases["warm"]["actions"].createNestedObject("rollover");
+  JsonObject policy_phases_warm_actions_rollover =
+      policy_phases["warm"]["actions"].createNestedObject("rollover");
   policy_phases_warm_actions_rollover["max_age"] = "2d";
   policy_phases_warm_actions_rollover["max_size"] = "10gb";
-  JsonObject policy_phases_cold_actions_rollover = policy_phases["cold"]["actions"].createNestedObject("rollover");
+  JsonObject policy_phases_cold_actions_rollover =
+      policy_phases["cold"]["actions"].createNestedObject("rollover");
   policy_phases_cold_actions_rollover["max_age"] = "5d";
   policy_phases_cold_actions_rollover["max_size"] = "10gb";
   JsonObject policy_phases_delete = policy_phases.createNestedObject("delete");
   policy_phases_delete["min_age"] = "7d";
-  JsonObject policy_phases_delete_actions_delete = policy_phases_delete["actions"].createNestedObject("delete");
+  JsonObject policy_phases_delete_actions_delete =
+      policy_phases_delete["actions"].createNestedObject("delete");
 }
