@@ -1,67 +1,67 @@
-#include "ElasticsearchClient.h"
+#include <ElasticsearchClient.h>
 
 ElasticsearchClient::ElasticsearchClient(const String& host, const int port)
-    : m_host(host), m_port(port) {}
+    : _host(host), _port(port) {}
 
-bool ElasticsearchClient::isIndexExist(const char* indexName) {
-  m_http.begin(m_host, m_port, String(indexName) + "?pretty");
-  const int httpCode = m_http.GET();
-  m_http.end();
-  return httpCode == HTTP_CODE_OK;
+bool ElasticsearchClient::isIndexExist(const char* index_name) {
+    _http.begin(_host, _port, String(index_name) + "?pretty");
+    const int http_code = _http.GET();
+    _http.end();
+    return http_code == HTTP_CODE_OK;
 }
 
-void ElasticsearchClient::setIndexMapping(const char* indexName,
+void ElasticsearchClient::setIndexMapping(const char* index_name,
                                           const JsonDocument& mapping) {
-  String payload;
-  serializeJson(mapping, payload);
+    String payload;
+    serializeJson(mapping, payload);
 
-  m_http.begin(m_host, m_port, String(indexName) + "?pretty");
-  m_http.addHeader("Content-Type", "application/json");
-  const int httpResponseCode = m_http.PUT(payload);
+    _http.begin(_host, _port, String(index_name) + "?pretty");
+    _http.addHeader("Content-Type", "application/json");
+    const int http_response_code = _http.PUT(payload);
 
-  if (httpResponseCode > 0) {
-    Serial.printf("HTTP Response code: %d\n", httpResponseCode);
-    Serial.println(m_http.getString());
-  } else {
-    Serial.printf("HTTP Error: %d\n", httpResponseCode);
-  }
-  m_http.end();
+    if (http_response_code > 0) {
+        Serial.printf("HTTP Response code: %d\n", http_response_code);
+        Serial.println(_http.getString());
+    } else {
+        Serial.printf("HTTP Error: %d\n", http_response_code);
+    }
+    _http.end();
 }
 
-void ElasticsearchClient::setIndexIlmPolicy(const char* indexName,
-                                            const JsonDocument& ilmPolicy) {
-  String payload;
-  serializeJson(ilmPolicy, payload);
+void ElasticsearchClient::setIndexIlmPolicy(const char* index_name,
+                                            const JsonDocument& ilm_policy) {
+    String payload;
+    serializeJson(ilm_policy, payload);
 
-  m_http.begin(m_host, m_port, String(indexName) + "/_ilm/policy");
-  m_http.addHeader("Content-Type", "application/json");
-  const int httpResponseCode = m_http.PUT(payload);
+    _http.begin(_host, _port, String(index_name) + "/_ilm/policy");
+    _http.addHeader("Content-Type", "application/json");
+    const int http_response_code = _http.PUT(payload);
 
-  if (httpResponseCode > 0) {
-    Serial.printf("HTTP Response code: %d\n", httpResponseCode);
-    Serial.println(m_http.getString());
-  } else {
-    Serial.printf("HTTP Error: %d\n", httpResponseCode);
-  }
-  m_http.end();
+    if (http_response_code > 0) {
+        Serial.printf("HTTP Response code: %d\n", http_response_code);
+        Serial.println(_http.getString());
+    } else {
+        Serial.printf("HTTP Error: %d\n", http_response_code);
+    }
+    _http.end();
 }
 
-void ElasticsearchClient::uploadData(const char* indexName,
+void ElasticsearchClient::uploadData(const char* index_name,
                                      const JsonDocument& data,
-                                     const char* indexId) {
-  String payload;
-  serializeJson(data, payload);
+                                     const char* index_id) {
+    String payload;
+    serializeJson(data, payload);
 
-  m_http.begin(m_host, m_port,
-               String(indexName) + "/_doc/" + indexId + "?pretty");
-  m_http.addHeader("Content-Type", "application/json");
-  const int httpResponseCode = m_http.POST(payload);
+    _http.begin(_host, _port,
+                String(index_name) + "/_doc/" + index_id + "?pretty");
+    _http.addHeader("Content-Type", "application/json");
+    const int http_response_code = _http.POST(payload);
 
-  if (httpResponseCode > 0) {
-    Serial.printf("HTTP Response code: %d\n", httpResponseCode);
-    Serial.println(m_http.getString());
-  } else {
-    Serial.printf("HTTP Error: %d\n", httpResponseCode);
-  }
-  m_http.end();
+    if (http_response_code > 0) {
+        Serial.printf("HTTP Response code: %d\n", http_response_code);
+        Serial.println(_http.getString());
+    } else {
+        Serial.printf("HTTP Error: %d\n", http_response_code);
+    }
+    _http.end();
 }
