@@ -6,18 +6,17 @@
 #include <WiFi.h>
 
 #define ANALOG_READ_PIN 34
-#define WIFI_SSID "hoge"
-#define WIFI_PASS "fuga"
-#define ELASTICSEARCH_HOST "piyo"
+#define WIFI_SSID "elecom-59585b"
+#define WIFI_PASS "xfxc48v28y6v"
+#define ELASTICSEARCH_HOST "192.168.2.102"
 #define SENSOR_READ_INTERVAL 600000  // msec
 #define DATA_UPLOAD_INTERVAL 1800000 // msec
 
-// Elasticsearch index settings
+// Elasticsearch settings
+ElasticsearchClient elastic(ELASTICSEARCH_HOST, 9200);
 const char *indexBaseName = "plant01";
 
-ElasticsearchClient elastic(ELASTICSEARCH_HOST, 9200);
-StaticJsonDocument<200> doc;
-
+// Timestamp
 struct tm timeInfo;
 
 // Sensor data variables
