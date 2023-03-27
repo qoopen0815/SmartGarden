@@ -3,7 +3,6 @@
 #include <ElasticsearchClient.h>
 #include <HTTPClient.h>
 #include <WiFi.h>
-#include <time.h>
 
 #define ANALOG_READ_PIN 34
 #define WIFI_SSID "hoge"
@@ -42,7 +41,7 @@ void setup() {
     }
     Serial.println("Connected to WiFi");
 
-    // Set up time
+    // Sync NTP server
     configTime(0, 0, "ntp.nict.jp", "ntp.jst.mfeed.ad.jp");
     while (!time(nullptr)) {
         delay(1000);
@@ -50,7 +49,7 @@ void setup() {
     }
     Serial.println("Time synchronized");
 
-    // Regist RTC task
+    // Regist RTOS task
     xTaskCreatePinnedToCore(readSensor,  // Function to implement the task.
                             "task1",
                             4 * 1024,  // The size of the task stack specified
