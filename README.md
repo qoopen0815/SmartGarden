@@ -30,14 +30,14 @@ Grafanaの公式マニュアルに沿ってダッシュボードを作成しま�
 このシステムでアップロードされるデータの構造は以下の通りです。
 （※他の値は追加予定）
 
-```json
+```
 {
     @timestamp: date,
     soil_moisture: long
 }
 ```
 
-また、データのライフサイクル設定（ilm policy）は以下の通りです。
+また、データのライフサイクル設定（ilm policy）は以下の通りです。  
 この設定は[こちら](https://github.com/qoopen0815/SmartGarden/blob/2a4746662acee0ee77d22576b2f95f3a7cc70290/edge/data_logger/src/main.cpp#L141-L160)で変更できます。
 
 |フェーズ|期限|最大データ量|
