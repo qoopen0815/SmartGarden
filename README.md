@@ -6,6 +6,7 @@ SmartGardenは、Raspberry PiとESP32を使用して屋外の環境情報を計�
 ## 機能
 - 屋外の温度、湿度、気圧、土壌の湿度を計測
 - ElasticsearchとGrafanaを使って環境情報を可視化
+- システム構成 -> [system_structure](https://github.com/qoopen0815/SmartGarden/blob/main/docs/system_structure.png)
 
 ## 必要なもの
 - Raspberry Pi
