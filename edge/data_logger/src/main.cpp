@@ -42,7 +42,7 @@ void setup() {
     }
     Serial.println("Connected to WiFi");
 
-    // Set up time
+    // Sync NTP server
     configTime(0, 0, "ntp.nict.jp", "ntp.jst.mfeed.ad.jp");
     while (!time(nullptr)) {
         delay(1000);
@@ -50,7 +50,7 @@ void setup() {
     }
     Serial.println("Time synchronized");
 
-    // Regist RTC task
+    // Regist RTOS task
     xTaskCreatePinnedToCore(readSensor,  // Function to implement the task.
                             "task1",
                             4 * 1024,  // The size of the task stack specified
