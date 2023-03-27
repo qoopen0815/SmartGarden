@@ -1,24 +1,23 @@
 #include <Arduino.h>
 #include <ArduinoJson.h>
+#include <ElasticsearchClient.h>
 #include <HTTPClient.h>
-#include <time.h>
 #include <WiFi.h>
+#include <time.h>
 
 #define ANALOG_READ_PIN 34
 #define WIFI_SSID "hoge"
 #define WIFI_PASS "fuga"
 #define ELASTICSEARCH_HOST "piyo"
-#define SENSOR_READ_INTERVAL 1000     // msec
+#define SENSOR_READ_INTERVAL 600000   // msec
 #define DATA_UPLOAD_INTERVAL 1800000  // msec
 
-// Elasticsearch index settings
-const char* indexBaseName = "plant01";
-const char* indexType = "_doc";
+// Elasticsearch settings
+ElasticsearchClient elastic(ELASTICSEARCH_HOST, 9200);
+const char *index_base_name = "plant01";
 
-HTTPClient http;
-StaticJsonDocument<200> doc;
-
-struct tm timeInfo;
+// Timestamp
+struct tm time_info;
 
 // Sensor data variables
 long moisture;
@@ -26,184 +25,136 @@ long moisture;
 // Declare functions
 void readSensor(void *pvParameters);
 void uploadData(void *pvParameters);
-void getLocalTimeFromEpoch(time_t epochTime, struct tm* timeinfo);
-bool isIndexExist(const char* host, const char* indexName);
-void createNewIndex(JsonDocument& mapping, const char* host, char* indexName);
-void createIndexName(const char* baseName, struct tm* timeinfo, char* indexName);
-void createJsonPayload(JsonDocument& doc);
-void sendHttpRequest(JsonDocument& doc, const char* host, const char* indexName, const char* indexType, const char* indexId);
+void getLocalTimeFromEpoch(time_t epoch_time, struct tm *timeinfo);
+void createIndexName(const char *base_name, struct tm *timeinfo,
+                     char *index_name);
+void createMappingJsonPayload(JsonDocument &mapping);
+void createIlmPolicyJsonPayload(JsonDocument &doc);
 
-void setup()
-{
-  Serial.begin(115200);
+void setup() {
+    Serial.begin(115200);
 
-  // Connect to Wi-Fi network
-  WiFi.begin(WIFI_SSID, WIFI_PASS);
-  while (WiFi.status() != WL_CONNECTED)
-  {
-    delay(1000);
-    Serial.println("Connecting to WiFi...");
-  }
-  Serial.println("Connected to WiFi");
-
-  // Set up time
-  configTime(
-    0,    // time offset [sec]
-    0,    // summer time
-    "ntp.nict.jp", "ntp.jst.mfeed.ad.jp");  // ntp server
-  while (!time(nullptr))
-  {
-    delay(1000);
-    Serial.println("Waiting for NTP sync...");
-  }
-  Serial.println("Time synchronized");
-  
-  // Regist RTC task
-  xTaskCreatePinnedToCore(
-    readSensor,   // Function to implement the task.
-    "task1",
-    4*1024,       // The size of the task stack specified as the number of * bytes.
-    NULL,         // Pointer that will be used as the parameter for the task * being created.
-    1,            // Priority of the task.
-    NULL,         // Task handler.
-    0);           // Core where the task should run.
-
-  xTaskCreatePinnedToCore(
-    uploadData,
-    "task2",
-    4*1024,
-    NULL,
-    2,
-    NULL,
-    0);
-}
-
-void loop()
-{
-}
-
-void readSensor(void * pvParameters)
-{
-  while(1)
-  {
-    // ここでセンサ値を格納する
-    // moisture = random(0, 10);
-    moisture = analogRead(ANALOG_READ_PIN);
-    Serial.println(moisture);
-    delay(SENSOR_READ_INTERVAL);  // 1 min
-  }
-}
-
-void uploadData(void * pvParameters)
-{
-  while(1)
-  {
-    // Get current date and time
-    time_t now = time(nullptr);
-    getLocalTimeFromEpoch(now, &timeInfo);
-
-    // Create index name
-    char indexName[30];
-    createIndexName(indexBaseName, &timeInfo, indexName);
-
-    // Check index exists
-    if (!isIndexExist(ELASTICSEARCH_HOST, indexName))
-    {
-      StaticJsonDocument<192> mapping;
-      JsonObject mappings_properties = mapping["mappings"].createNestedObject("properties");
-      JsonObject mappings_properties__timestamp = mappings_properties.createNestedObject("@timestamp");
-      mappings_properties__timestamp["type"] = "date";
-      mappings_properties__timestamp["format"] = "date_time_no_millis";
-      mappings_properties["soil_moisture"]["type"] = "long";
-      createNewIndex(mapping, ELASTICSEARCH_HOST, indexName);
+    // Connect to Wi-Fi network
+    WiFi.begin(WIFI_SSID, WIFI_PASS);
+    while (WiFi.status() != WL_CONNECTED) {
+        delay(1000);
+        Serial.println("Connecting to WiFi...");
     }
+    Serial.println("Connected to WiFi");
 
-    // Create upload data
-    char timestamp[20];
-    sprintf(timestamp, "%04d-%02d-%02dT%02d:%02d:%02dZ",
-            timeInfo.tm_year + 1900, timeInfo.tm_mon + 1, timeInfo.tm_mday,
-            timeInfo.tm_hour, timeInfo.tm_min, timeInfo.tm_sec);
-    StaticJsonDocument<64> doc;
-    doc["@timestamp"] = timestamp;
-    doc["soil_moisture"] = moisture;
+    // Set up time
+    configTime(0, 0, "ntp.nict.jp", "ntp.jst.mfeed.ad.jp");
+    while (!time(nullptr)) {
+        delay(1000);
+        Serial.println("Waiting for NTP sync...");
+    }
+    Serial.println("Time synchronized");
 
-    // Send data to elasticsearch via http
-    char docId[20];
-    sprintf(docId, "%04d%02d%02d%02d%02d%02d",
-            timeInfo.tm_year + 1900, timeInfo.tm_mon + 1, timeInfo.tm_mday,
-            timeInfo.tm_hour, timeInfo.tm_min, timeInfo.tm_sec);
-    sendHttpRequest(doc, ELASTICSEARCH_HOST, indexName, indexType, docId);
+    // Regist RTC task
+    xTaskCreatePinnedToCore(readSensor,  // Function to implement the task.
+                            "task1",
+                            4 * 1024,  // The size of the task stack specified
+                                       // as the number of * bytes.
+                            NULL,  // Pointer that will be used as the parameter
+                                   // for the task * being created.
+                            1,     // Priority of the task.
+                            NULL,  // Task handler.
+                            0);    // Core where the task should run.
 
-    delay(DATA_UPLOAD_INTERVAL);  // 30 min
-  }
+    xTaskCreatePinnedToCore(uploadData, "task2", 4 * 1024, NULL, 2, NULL, 0);
 }
 
-void getLocalTimeFromEpoch(time_t epochTime, struct tm* timeinfo)
-{
-  localtime_r(&epochTime, timeinfo);
+void loop() {}
+
+void readSensor(void *pvParameters) {
+    while (1) {
+        // ここでセンサ値を格納する
+        moisture = analogRead(ANALOG_READ_PIN);
+        Serial.println(moisture);
+        delay(SENSOR_READ_INTERVAL);
+    }
 }
 
-bool isIndexExist(const char* host, const char* indexName)
-{
-  http.begin(host, 9200, String(indexName) + "?pretty");
-  int httpCode = http.GET();
-  http.end();
-  return httpCode == HTTP_CODE_OK;
+void uploadData(void *pvParameters) {
+    while (1) {
+        // Get current date and time
+        time_t now = time(nullptr);
+        getLocalTimeFromEpoch(now, &time_info);
+
+        // Create index name
+        char index_name[30];
+        createIndexName(index_base_name, &time_info, index_name);
+
+        // Check index exists
+        if (!elastic.isIndexExist(index_name)) {
+            StaticJsonDocument<192> mapping;
+            createMappingJsonPayload(mapping);
+            elastic.setIndexMapping(index_name, mapping);
+            StaticJsonDocument<384> ilm;
+            createIlmPolicyJsonPayload(ilm);
+            elastic.setIndexIlmPolicy(index_name, ilm);
+        }
+
+        // Create upload data
+        char timestamp[20];
+        sprintf(timestamp, "%04d-%02d-%02dT%02d:%02d:%02dZ",
+                time_info.tm_year + 1900, time_info.tm_mon + 1,
+                time_info.tm_mday, time_info.tm_hour, time_info.tm_min,
+                time_info.tm_sec);
+        StaticJsonDocument<64> doc;
+        doc["@timestamp"] = timestamp;
+        doc["soil_moisture"] = moisture;
+
+        // Send data to elasticsearch via http
+        char doc_id[20];
+        sprintf(doc_id, "%04d%02d%02d%02d%02d%02d", time_info.tm_year + 1900,
+                time_info.tm_mon + 1, time_info.tm_mday, time_info.tm_hour,
+                time_info.tm_min, time_info.tm_sec);
+        elastic.uploadData(index_name, doc, doc_id);
+
+        delay(DATA_UPLOAD_INTERVAL);
+    }
 }
 
-void createNewIndex(JsonDocument& mapping, const char* host, char* indexName)
-{
-  Serial.println("create index");
-  String payload;
-  serializeJson(mapping, payload);
-  
-  // http.begin("http://" + String(host) + ":" + String(9200) + "/" + String(indexName) + "?pretty");
-  http.begin(host, 9200, String(indexName) + "?pretty");
-  http.addHeader("Content-Type", "application/json");
-  int httpResponseCode = http.PUT(payload);
-
-  if (httpResponseCode > 0)
-  {
-    Serial.printf("HTTP Response code: %d\n", httpResponseCode);
-    // String response = http.getString();
-    // Serial.println(response);
-  }
-  else
-  {
-    Serial.printf("HTTP Error: %d\n", httpResponseCode);
-  }
-  
-  payload.end();
-  http.end();
+void getLocalTimeFromEpoch(time_t epoch_time, struct tm *timeinfo) {
+    localtime_r(&epoch_time, timeinfo);
 }
 
-void createIndexName(const char* baseName, struct tm* timeinfo, char* indexName)
-{
-  char dateBuff[20];
-  strftime(dateBuff, sizeof(dateBuff), "%Y.%m.%d", timeinfo);
-  sprintf(indexName, "%s-%04d.%02d.%02d", baseName, timeinfo->tm_year + 1900, timeinfo->tm_mon + 1, timeinfo->tm_mday);
+void createIndexName(const char *base_name, struct tm *timeinfo,
+                     char *index_name) {
+    char date_buff[20];
+    strftime(date_buff, sizeof(date_buff), "%Y.%m.%d", timeinfo);
+    sprintf(index_name, "%s-%04d.%02d.%02d", base_name,
+            timeinfo->tm_year + 1900, timeinfo->tm_mon + 1, timeinfo->tm_mday);
 }
 
-void sendHttpRequest(JsonDocument& doc, const char* host, const char* indexName, const char* indexType, const char* indexId)
-{
-  String payload;
-  serializeJson(doc, payload);
+void createMappingJsonPayload(JsonDocument &doc) {
+    JsonObject mappings_properties =
+        doc["mappings"].createNestedObject("properties");
+    JsonObject mappings_properties_timestamp =
+        mappings_properties.createNestedObject("@timestamp");
+    mappings_properties_timestamp["type"] = "date";
+    mappings_properties_timestamp["format"] = "date_time_no_millis";
+    mappings_properties["soil_moisture"]["type"] = "long";
+}
 
-  http.begin(host, 9200, String(indexName) + "/" + indexType + "/" + indexId + "?pretty");
-  http.addHeader("Content-Type", "application/json");
-  int httpResponseCode = http.POST(payload);
-
-  if (httpResponseCode > 0)
-  {
-    Serial.printf("HTTP Response code: %d\n", httpResponseCode);
-    // String response = http.getString();
-    // Serial.println(response);
-  }
-  else
-  {
-    Serial.printf("HTTP Error: %d\n", httpResponseCode);
-  }
-
-  payload.end();
-  http.end();
+void createIlmPolicyJsonPayload(JsonDocument &doc) {
+    JsonObject policy_phases = doc["policy"].createNestedObject("phases");
+    JsonObject policy_phases_hot_actions_rollover =
+        policy_phases["hot"]["actions"].createNestedObject("rollover");
+    policy_phases_hot_actions_rollover["max_age"] = "1d";
+    policy_phases_hot_actions_rollover["max_size"] = "10gb";
+    JsonObject policy_phases_warm_actions_rollover =
+        policy_phases["warm"]["actions"].createNestedObject("rollover");
+    policy_phases_warm_actions_rollover["max_age"] = "2d";
+    policy_phases_warm_actions_rollover["max_size"] = "10gb";
+    JsonObject policy_phases_cold_actions_rollover =
+        policy_phases["cold"]["actions"].createNestedObject("rollover");
+    policy_phases_cold_actions_rollover["max_age"] = "5d";
+    policy_phases_cold_actions_rollover["max_size"] = "10gb";
+    JsonObject policy_phases_delete =
+        policy_phases.createNestedObject("delete");
+    policy_phases_delete["min_age"] = "7d";
+    JsonObject policy_phases_delete_actions_delete =
+        policy_phases_delete["actions"].createNestedObject("delete");
 }
